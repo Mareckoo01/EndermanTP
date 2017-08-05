@@ -1,6 +1,6 @@
 # EndermanTP
-Players need **endermantp.teleport** permission to be teleported
-[Compiled plugin .jar](https://github.com/Mareckoo01/EndermanTP/raw/master/compiled/EndermanTP.jar)
+###### Players need **endermantp.teleport** permission to be teleported
+###### [Compiled plugin .jar](https://github.com/Mareckoo01/EndermanTP/raw/master/compiled/EndermanTP.jar)
 ### Config options
 - rangeX: range in the X direction
 - rangeY: range in the Y direction
