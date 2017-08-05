@@ -4,67 +4,46 @@ import java.util.HashMap;
 import java.util.UUID;
 import java.util.logging.Logger;
 
-import org.bukkit.Location;
-import org.bukkit.entity.Entity;
+import org.bukkit.ChatColor;
+import org.bukkit.Material;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
-import org.bukkit.event.entity.EntityTeleportEvent;
+import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.plugin.PluginManager;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitScheduler;
 
 public class EndermanTP extends JavaPlugin implements Listener{
-	HashMap<UUID, Long> cooldown = new HashMap<UUID, Long>();
+	HashMap<UUID, Integer> playerThresholds = new HashMap<UUID, Integer>();
 	Logger logger = getLogger();
 	PluginManager pm = getServer().getPluginManager();
 	BukkitScheduler scheduler = getServer().getScheduler();
 	
 	
 	//Configurable
-	double rangeX = 30;
-	double rangeY = 30;
-	double rangeZ = 30;
-	long cooldownMs = 30000;
-	double multiply = 3;
-	boolean cancelEndermanTeleport = false;
+	int threshold = 5;
+	int delay = 80;
+	boolean debug = false;
 	//
 	
 	@Override
 	public void onEnable(){
-		rangeX = getConfig().getDouble("rangeX", 30);
-		rangeY = getConfig().getDouble("rangeY", 30);
-		rangeZ = getConfig().getDouble("rangeZ", 30);
-		cooldownMs = getConfig().getLong("cooldownMs", 30000);
-		multiply = getConfig().getDouble("multiply", 3);
-		cancelEndermanTeleport = getConfig().getBoolean("cancelEndermanTeleport", false);
-		if(rangeX <= 0){
-			logger.warning("Range X was less than or equal to 0! Setting to 30(default)");
-			rangeX = 30;
+		threshold = getConfig().getInt("threshold", 5);
+		delay = getConfig().getInt("delay", 80);
+		debug = getConfig().getBoolean("debug", false);
+		if(threshold <= 0){
+			logger.warning("Threshold was less than or equal to 0! Setting to 5(default)");
+			threshold = 5;
 		}
-		if(rangeY <= 0){
-			logger.warning("Range Y was less than or equal to 0! Setting to 30(default)");
-			rangeY = 30;
+		if(delay <= 0){
+			logger.warning("Delay was less than or equal to 0! Setting to 80(default)");
+			delay = 80;
 		}
-		if(rangeZ <= 0){
-			logger.warning("Range Z was less than or equal to 0! Setting to 30(default)");
-			rangeZ = 30;
-		}
-		if(cooldownMs <= 0){
-			logger.warning("Cooldown miliseconds was less than or equal to 0! Setting to 30 000(default) = 30 seconds");
-			cooldownMs = 30000;
-		}
-		if(multiply <= 0){
-			logger.warning("Multiply was less than or equal to 0! Setting to 3(default)");
-			multiply = 3;
-		}
-		getConfig().set("rangeX", rangeX);
-		getConfig().set("rangeY", rangeY);
-		getConfig().set("rangeZ", rangeZ);
-		getConfig().set("cooldownMs", cooldownMs);
-		getConfig().set("multiply", multiply);
-		getConfig().set("cancelEndermanTeleport", cancelEndermanTeleport);
+		getConfig().set("threshold", threshold);
+		getConfig().set("delay", delay);
+		getConfig().set("debug", debug);
 		saveConfig();
 		pm.registerEvents(this, this);
 	}
@@ -75,84 +54,57 @@ public class EndermanTP extends JavaPlugin implements Listener{
 	}
 	
 	@EventHandler
-	public void onTeleport(EntityTeleportEvent e){
-		if(e.getEntityType() == EntityType.ENDERMAN){
-			if(teleportNearestPlayersToEnderman(e.getEntity())){
-				if(cancelEndermanTeleport){
-					e.setCancelled(true);
-				}
-			}
-		}
-	}
-	
-	public boolean teleportNearestPlayersToEnderman(Entity e){
-		int found = 0;
-		if(e != null){
-			for(Entity en : e.getNearbyEntities(rangeX, rangeY, rangeZ)){
-				if(en instanceof Player){
-					Player player = (Player) en;
-					if(!player.hasPermission("endermantp.teleport")){
-						continue;
-					}
-					if(cooldown.containsKey(player.getUniqueId())){
-						if(System.currentTimeMillis() - cooldown.get(player.getUniqueId()) > cooldownMs){
-							cooldown.put(player.getUniqueId(), System.currentTimeMillis());
-							found++;
-							scheduler.scheduleSyncDelayedTask(this, new Runnable() {
-								Player pla = player;
-								Entity ent = e;
-								@Override
-								public void run() {
-									if(ent != null && !ent.isDead()){
-										if(pla != null && !pla.isDead()){
-											Location loc = ent.getLocation();
-											loc.add(loc.getDirection().multiply(multiply).toLocation(loc.getWorld()));
-											loc.setY(loc.getWorld().getHighestBlockYAt(loc));
-											pla.teleport(lookTowardsLocation(loc, en.getLocation()));
-										}
-									}
-								}
-							});
+	public void onHit(EntityDamageByEntityEvent e){
+		if(e.getDamager() instanceof Player){
+			if(e.getEntityType() == EntityType.ENDERMAN){
+				Player player = (Player) e.getDamager();
+				if(player.hasPermission("endermantp.teleport")){
+					if(playerThresholds.containsKey(player.getUniqueId())){
+						playerThresholds.put(player.getUniqueId(), playerThresholds.get(player.getUniqueId()) + 1);
+						if(debug){
+							player.sendMessage("[EndermanTP] " + ChatColor.GREEN + "+1" + ChatColor.WHITE + ", current: " + playerThresholds.get(player.getUniqueId()));
 						}
-					} else {
-						cooldown.put(player.getUniqueId(), System.currentTimeMillis());
-						found++;
 						scheduler.scheduleSyncDelayedTask(this, new Runnable() {
-							Player pla = player;
-							Entity ent = e;
+							UUID uuid = player.getUniqueId();
 							@Override
 							public void run() {
-								if(ent != null && !ent.isDead()){
-									if(pla != null && !pla.isDead()){
-										Location loc = ent.getLocation();
-										loc.add(loc.getDirection().multiply(multiply).toLocation(loc.getWorld()));
-										loc.setY(loc.getWorld().getHighestBlockYAt(loc));
-										pla.teleport(lookTowardsLocation(loc, en.getLocation()));
-									}
+								playerThresholds.put(uuid, playerThresholds.get(uuid) - 1);
+								if(debug){
+									player.sendMessage("[EndermanTP] " + ChatColor.RED + "-1" + ChatColor.WHITE + ", current: " + playerThresholds.get(player.getUniqueId()));
 								}
 							}
-						});
+						}, delay);
+					} else {
+						playerThresholds.put(player.getUniqueId(), 1);
+						if(debug){
+							player.sendMessage("[EndermanTP] " + ChatColor.GREEN + "(Player added) +1" + ChatColor.WHITE + ", current: " + playerThresholds.get(player.getUniqueId()));
+						}
+						scheduler.scheduleSyncDelayedTask(this, new Runnable() {
+							UUID uuid = player.getUniqueId();
+							@Override
+							public void run() {
+								playerThresholds.put(uuid, playerThresholds.get(uuid) - 1);
+								if(debug){
+									player.sendMessage("[EndermanTP] " + ChatColor.RED + "(Player added) -1" + ChatColor.WHITE + ", current: " + playerThresholds.get(player.getUniqueId()));
+								}
+							}
+						}, delay);
+					}
+					if(playerThresholds.get(player.getUniqueId()) > threshold){
+						if(player.getLocation().add(0, 2, 0).getBlock().getType() == Material.AIR){
+							e.getEntity().teleport(player);
+							if(debug){
+								player.sendMessage("[EndermanTP] Over threshold, teleporting enderman to you(no block on top of you detected)");
+							}
+						} else {
+							player.teleport(e.getEntity());
+							if(debug){
+								player.sendMessage("[EndermanTP] Over threshold, teleporting you to enderman(block on top of you detected)");
+							}
+						}
 					}
 				}
 			}
 		}
-		return !(found < 1);
-	}
-	
-	public Location lookTowardsLocation(Location from, Location to){
-		if(from != null && to != null){
-			Location loc = from.clone();
-			double x = to.getX() - from.getX();
-			double y = to.getY() - from.getY();
-			double z = to.getZ() - from.getZ();
-			if(x == 0 && z == 0){
-				loc.setPitch(y > 0 ? -90 : 90);
-				return loc;
-			}
-			loc.setYaw((float) Math.toDegrees((Math.atan2(-x, z) + (Math.PI * 2)) % (Math.PI * 2)));
-			loc.setPitch((float) Math.toDegrees(Math.atan(-y / Math.sqrt((x * x) + (z * z)))));
-			return loc;
-		}
-		return null;
 	}
 }
