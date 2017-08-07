@@ -1,3 +1,6 @@
 main: endermantp.EndermanTP
 name: EndermanTP
 version: 0.1
+commands:
+  endermantp:
+    usage: /endermantp <delay/threshold> [newValue]
